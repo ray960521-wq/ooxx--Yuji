@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>龍龍 圈圈叉叉 (最終版)</title>
+    
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 載入字體 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* * 基本樣式和背景設定
+         * ----------------------------------------------------
+         */
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            position: relative;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* 隱藏滾動條 */
+            background-color: #111; /* 深色背景底色 */
+        }
+
+        #backgroundImage {
+            position: absolute; /* 改為絕對定位，以便JS控制 */
+            width: 100%; /* 初始寬度 */
+            height: 100%; /* 初始高度 */
+            background-image: url('https://firebasestorage.googleapis.com/v0/b/ooxx-62994.firebasestorage.app/o/image.png?alt=media&token=580e06ea-9a0d-4946-8f79-6949da8025c6');
+            background-size: contain; /* 🔥 更改：從 cover 改為 contain */
+            background-repeat: no-repeat; /* 🔥 新增：確保圖片不重複 */
+            background-position: center center; /* JS 將控制這個 */
+            will-change: transform, background-position; /* 效能優化 */
+            cursor: grab; /* 拖動手勢 */
+            transition: transform 0.05s ease-out; /* 縮放時的平滑過渡 */
+        }
+
+        #backgroundImage:active {
+            cursor: grabbing;
+        }
+
+        /* * 遊戲區塊 (可拖動和調整大小)
+         * ----------------------------------------------------
+         */
+        #gameContainer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%); /* 初始置中 */
+            
+            /* 🔥 移除 min-width，改為固定寬度 */
+            width: 300px; /* 固定寬度 300px */
+            
+            /* 讓子元素(棋盤)可以基於此容器調整大小 */
+            display: flex;
+            flex-direction: column;
+            
+            /* 效能優化 */
+            will-change: transform, width, height;
+        }
+
+        /* * 控制面板 (遊戲區的 "頭部")
+         * ----------------------------------------------------
+         */
+        #controlPanel {
+            width: 100%;
+            background-color: rgba(22, 32, 53, 0.85); /* 深藍色半透明 */
+            backdrop-filter: blur(10px);
+            border-radius: 12px; /* 🔥 更改：讓所有角落都是圓角 */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            padding: 0.75rem; /* 🔥 更改：統一的內距 */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            cursor: move; /* 拖動手勢 */
+            
+            /* 🔥 更改：使用 Flexbox 垂直佈局 */
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem; /* 🔥 新增：行之間的間距 */
+        }
+
+        /* 🔥 新增：控制面板頂部行 (狀態 + 按鈕) */
+        .control-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        /* 狀態文字 (龍龍思考中...) */
+        #statusMessage {
+            font-weight: 600;
+            font-size: 1rem; /* 使用 rem 單位以便縮放 */
+            white-space: nowrap; /* 防止換行 */
+            color: #e0e0e0;
+            margin-right: 8px; /* 和按鈕組保持一點距離 */
+        }
+        
+        /* 按鈕群組 */
+        .button-group {
+            display: flex;
+            gap: 0.5rem; /* 按鈕間距 */
+            align-items: center;
+        }
+
+        /* 控制面板中的按鈕 */
+        .control-button {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #f0f0f0;
+            font-weight: 500;
+            padding: 0.25rem 0.5rem; /* 較小的按鈕 */
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            font-size: 0.8rem; /* 使用 rem 單位 */
+            white-space: nowrap;
+        }
+        
+        .control-button:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .control-button:active {
+            transform: scale(0.95);
+        }
+        
+        /* 🔥 新增：API Key 輸入框的樣式 */
+        .api-key-row {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            gap: 0.5rem;
+        }
+        .api-key-label {
+            font-size: 0.8rem;
+            color: #ccc;
+            white-space: nowrap;
+        }
+        #apiKeyInput {
+            flex-grow: 1; /* 填滿剩餘空間 */
+            background-color: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+            font-family: monospace; /* 適合顯示 Key */
+        }
+        #apiKeyInput::placeholder {
+            color: #888;
+        }
+
+        /* 🔥 移除：刪除 .resize-button 樣式 */
+
+
+        /* * 遊戲棋盤 (格子)
+         * ----------------------------------------------------
+         */
+        #board {
+            /* display: grid; */ /* 🔥 移除：這些樣式是多餘的 */
+            /* grid-template-columns: repeat(3, 1fr); */ /* 🔥 移除 */
+            /* grid-template-rows: repeat(3, 1fr); */ /* 🔥 移除 */
+            /* gap: 0.5rem; */ /* 🔥 移除 */
+            
+            width: 100%; /* 填滿 gameContainer */
+            
+            /* * 關鍵：讓棋盤保持 1:1 的長寬比 
+             * padding-top: 100% 意思是 "padding 數值等於寬度的 100%"
+             * 這會撐開一個 1:1 的空間，然後我們用 position: absolute 把格子放回去。
+             */
+            /* height: 0; */ /* 🔥 移除：改用 aspect-ratio */
+            /* padding-top: 100%; */ /* 🔥 移除：改用 aspect-ratio */
+            aspect-ratio: 1 / 1; /* 🔥 新增：使用現代 CSS 方式保持 1:1 */
+            
+            position: relative;
+        }
+        
+        /* * 棋盤內容 (格子的父容器)
+         * 我們需要這個 div 才能在 1:1 的 padding 空間上定位
+         */
+        .board-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0; /* 移除 gap */
+            
+            /* 新增：為容器加上外框，這會是九宮格的外框 */
+            border: 2px solid rgba(0, 0, 0, 0.7); /* 🔥 更改：線條改為黑色 */
+            border-radius: 0.75rem; /* 配合格子的圓角 */
+            overflow: hidden; /* 確保內部的格子不會超出圓角 */
+        }
+
+
+        /* * 遊戲格子 (X 和 O)
+         * ----------------------------------------------------
+         */
+        .cell {
+            background-color: rgba(255, 255, 255, 0.1); /* 格子半透明背景 */
+            backdrop-filter: blur(5px);
+            /* border-radius: 0.75rem; */ /* 圓角 (使用 rem) - 改由 NTH-CHILD 控制 */
+            
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            
+            line-height: 1; /* 🔥 新增：固定行高，防止文字撐開格子 */
+            overflow: hidden; /* 🔥 新增：確保內容不會溢出並改變大小 */
+            
+            font-weight: bold;
+            font-size: 5rem; /* 基本字體大小 (使用 rem)，JS 會調整 */
+            
+            /* 保持 1:1 的長寬比 */
+            width: 100%;
+            aspect-ratio: 1 / 1; 
+            
+            cursor: pointer;
+            transition: background-color 0.2s;
+            /* border: 1px solid rgba(255, 255, 255, 0.1); */ /* 移除舊 border */
+
+            /* 新增：只加上內部的線 */
+            border-bottom: 2px solid rgba(0, 0, 0, 0.7); /* 🔥 更改：線條改為黑色 */
+            border-right: 2px solid rgba(0, 0, 0, 0.7); /* 🔥 更改：線條改為黑色 */
+        }
+        
+        .cell:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .cell.cursor-not-allowed {
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+
+        .cell-x { color: #ef4444; } /* 紅色 */
+        .cell-o { color: #3b82f6; } /* 藍色 */
+
+        /* * 讀取遮罩 (龍龍思考中...)
+         * ----------------------------------------------------
+         */
+        #aiLoading {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(2px);
+            
+            display: flex; /* 改為 flex */
+            flex-direction: column; /* 垂直排列 */
+            align-items: center;
+            justify-content: center;
+            
+            z-index: 10;
+            border-radius: 0.75rem; /* 配合格子圓角 */
+            
+            /* 初始隱藏 */
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s, visibility 0.2s;
+        }
+
+        #aiLoading.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        /* 讀取動畫 */
+        .loader {
+            width: 3rem; /* (使用 rem) */
+            height: 3rem; /* (使用 rem) */
+            border: 4px solid #FFF;
+            border-bottom-color: #3b82f6; /* 藍色 */
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: spin 1s linear infinite;
+            margin-bottom: 0.75rem; /* 和文字的間距 */
+        }
+        
+        /* 讀取文字 */
+        #loadingText {
+            color: white;
+            font-size: 1rem; /* (使用 rem) */
+            font-weight: 600;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 🔥 移除：刪除 #resizeHandle 樣式 */
+        
+        /* * 新增：背景縮放按鈕
+         * ----------------------------------------------------
+         */
+        .zoom-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: rgba(22, 32, 53, 0.85);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+        .zoom-button:hover { 
+            background-color: rgba(42, 52, 73, 1); 
+        }
+        .zoom-button:active { 
+            transform: scale(0.9); 
+        }
+
+        /* --- 新增：九宮格內線 (移除外框) --- */
+        .cell:nth-child(3n) { /* 右邊的欄位 */
+            border-right: none;
+        }
+        .cell:nth-child(n+7) { /* 下面的那排 */
+            border-bottom: none;
+        }
+        
+        /* 調整格子的圓角，只有角落的格子需要 */
+        .cell:nth-child(1) { border-top-left-radius: 0.6rem; }
+        .cell:nth-child(3) { border-top-right-radius: 0.6rem; }
+        .cell:nth-child(7) { border-bottom-left-radius: 0.6rem; }
+        .cell:nth-child(9) { border-bottom-right-radius: 0.6rem; }
+
+    </style>
+</head>
+<body class="p-0 m-0">
+
+    <!-- 背景圖片 -->
+    <div id="backgroundImage"></div>
+
+    <!-- 遊戲區塊 (可拖動和調整大小) -->
+    <div id="gameContainer">
+        
+        <!-- 控制面板 (拖動的把手) -->
+        <div id="controlPanel">
+            <!-- 頂部行：狀態 + 按鈕 -->
+            <div class="control-top-row">
+                <div id="statusMessage" class="text-base font-semibold text-gray-200 truncate">
+                    輪到你了
+                </div>
+                <div class="button-group">
+                    <button id="playerToggleBtn" class="control-button">
+                        你 (X) 先手
+                    </button>
+                    <button id="resetButton" class="control-button">
+                        重設
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 🔥 新增：API Key 輸入行 -->
+            <div class="api-key-row">
+                <label for="apiKeyInput" class="api-key-label">API Key:</label>
+                <input type="password" id="apiKeyInput" placeholder="貼上你自己的 API Key">
+            </div>
+        </div>
+
+        <!-- 遊戲棋盤 -->
+        <div id="board">
+            <div class="board-content">
+                <!-- 格子將由 JS 動態生成 -->
+            </div>
+            
+            <!-- 讀取遮罩 -->
+            <div id="aiLoading">
+                <div class="loader"></div>
+                <div id="loadingText">龍龍思考中...</div>
+            </div>
+        </div>
+        
+        <!-- 🔥 移除：調整大小的拖曳點 -->
+    </div>
+    
+    <!-- 新增：背景縮放控制按鈕 -->
+    <div id="bgZoomControls" style="position: fixed; bottom: 20px; left: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px;">
+        <button id="bgZoomInBtn" class="zoom-button">+</button>
+        <button id="bgZoomOutBtn" class="zoom-button">-</button>
+    </div>
+
+    <!-- 
+      * 載入 JavaScript
+      * 所有的程式邏輯現在都合併到這一個檔案中
+    -->
+    <script type="module">
+        /* * AI 圈圈叉叉 (最終版) - JavaScript 程式邏輯
+         * ----------------------------------------------------
+         */
+
+        // --- Gemini API 設定 ---
+        let apiKey = "AIzaSyBM0BBCpb_ctviUert_oaMOvGmPLSwYSd0"; // 🔥 更改：您的 API 金鑰 (const 改為 let)
+        // 🔥 移除：const geminiApiUrl，我們將在函式內動態產生
+
+        // --- DOM 元素 ---
+        const body = document.body;
+        const bgImage = document.getElementById('backgroundImage');
+        const gameContainer = document.getElementById('gameContainer');
+        const controlPanel = document.getElementById('controlPanel');
+        const statusMessageEl = document.getElementById('statusMessage');
+        const boardEl = document.getElementById('board').querySelector('.board-content');
+        const aiLoadingEl = document.getElementById('aiLoading');
+        const resetButton = document.getElementById('resetButton');
+        const playerToggleBtn = document.getElementById('playerToggleBtn');
+        const loadingTextEl = document.getElementById('loadingText'); // 抓取讀取文字元素
+        const apiKeyInput = document.getElementById('apiKeyInput'); // 🔥 新增：API Key 輸入框
+        
+        // 新增的 DOM 元素
+        const bgZoomInBtn = document.getElementById('bgZoomInBtn');
+        const bgZoomOutBtn = document.getElementById('bgZoomOutBtn');
+        /* 🔥 移除：gameResizeInBtn, gameResizeOutBtn */
+
+
+        // --- 遊戲狀態 ---
+        let board = Array(9).fill('');
+        let humanPlayer = 'X'; // 玩家預設為 'X'
+        let aiPlayer = 'O';    // AI 預設為 'O'
+        let currentPlayer = 'X'; // 'X' 永遠先手
+        let gameActive = true;
+        let isAiThinking = false; // AI 思考中標記
+
+        // --- 遊戲勝利組合 ---
+        const winningCombos = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8], // 橫排
+            [0, 3, 6], [1, 4, 7], [2, 5, 8], // 直排
+            [0, 4, 8], [2, 4, 6]  // 斜線
+        ];
+
+        // --- 畫面互動變數 ---
+        // 背景平移
+        let isPanning = false;
+        let bgPosX = 50; // 背景 X 位置 (百分比)
+        let bgPosY = 50; // 背景 Y 位置 (百分比)
+        let panStartX = 0;
+        let panStartY = 0;
+
+        // 背景縮放
+        let bgScale = 1; // 1 = 100%
+        const minScale = 0.3;
+        const maxScale = 4;
+
+        // 遊戲區拖動
+        let isDraggingGame = false;
+        let gameDragStartX = 0;
+        let gameDragStartY = 0;
+        let gameOffsetX = 0;
+        let gameOffsetY = 0;
+
+        /* 🔥 移除：遊戲區調整大小相關變數 */
+        // let isResizing = false;
+        // let gameWidth = 300; 
+        // const minGameWidth = 200;
+        // const maxGameWidth = 800;
+
+        /* * ----------------------------------------------------
+         * 主要遊戲邏輯
+         * ----------------------------------------------------
+         */
+
+        // --- 遊戲初始化 ---
+        function initializeGame() {
+            board = Array(9).fill('');
+            gameActive = true;
+            isAiThinking = false;
+            currentPlayer = 'X'; // X 永遠先手
+            aiLoadingEl.classList.remove('show');
+            renderBoard();
+            updateStatusMessage();
+
+            // 檢查是否輪到 AI 先手
+            if (currentPlayer === aiPlayer) {
+                handleAITurn(); // 如果 AI 是 'X'，AI 先手
+            }
+        }
+
+        // --- 渲染棋盤 ---
+        function renderBoard() {
+            boardEl.innerHTML = ''; // 清空棋盤
+            
+            board.forEach((cell, index) => {
+                const cellEl = document.createElement('div');
+                cellEl.className = 'cell';
+                
+                if (cell === 'X') {
+                    cellEl.textContent = 'X';
+                    cellEl.classList.add('cell-x');
+                } else if (cell === 'O') {
+                    cellEl.textContent = 'O';
+                    cellEl.classList.add('cell-o');
+                }
+                
+                // 只有在輪到玩家、格子是空的、遊戲還在進行時，才加上點擊事件
+                if (gameActive && cell === '' && currentPlayer === humanPlayer && !isAiThinking) {
+                    cellEl.onclick = () => handleCellClick(index);
+                } else {
+                    cellEl.classList.add('cursor-not-allowed');
+                }
+                
+                boardEl.appendChild(cellEl);
+            });
+
+            /* 🔥 移除：不再需要動態更新字體大小 */
+            // updateBoardFontSize();
+        }
+
+        // --- 更新狀態訊息 ---
+        function updateStatusMessage() {
+            if (!gameActive) {
+                // 遊戲結束的訊息已在 checkGameResult 中處理
+                return;
+            }
+            
+            if (isAiThinking) {
+                // 🔥 更改 #2：AI 思考中的文字
+                loadingTextEl.textContent = '龍龍思考中...'; // 更新遮罩上的文字
+                aiLoadingEl.classList.add('show');
+                statusMessageEl.textContent = '龍龍思考中...'; // 更新控制面板的文字
+            } else {
+                aiLoadingEl.classList.remove('show');
+                if (currentPlayer === humanPlayer) {
+                    statusMessageEl.textContent = '輪到你了';
+                } else {
+                    // 這不應該發生，因為 AI 思考完就會換人
+                    statusMessageEl.textContent = '輪到 龍龍'; /* 🔥 更改 */
+                }
+            }
+        }
+
+
+        // --- 玩家點擊處理 ---
+        function handleCellClick(index) {
+            if (!gameActive || board[index] !== '' || currentPlayer !== humanPlayer || isAiThinking) {
+                return;
+            }
+
+            // 玩家下棋
+            board[index] = humanPlayer;
+            currentPlayer = aiPlayer;
+            renderBoard();
+
+            // 檢查結果
+            if (checkGameResult()) {
+                return;
+            }
+            
+            // 輪到 AI
+            isAiThinking = true;
+            updateStatusMessage();
+            
+            // 🔥 更改 #1：移除 500ms 延遲
+            // 立即呼叫 AI，不再等待
+            handleAITurn();
+        }
+
+        // --- AI 回合處理 ---
+        async function handleAITurn() {
+            isAiThinking = true;
+            updateStatusMessage();
+
+            try {
+                const move = await getGeminiMove();
+                if (gameActive) { // 確保在 AI 思考期間遊戲沒有被重設
+                    executeMove(move);
+                }
+            } catch (error) {
+                console.error("Gemini API 呼叫失敗:", error);
+                // API 失敗時，使用備用（隨機）的 AI 策略
+                if (gameActive) {
+                    executeFallbackMove();
+                }
+            } finally {
+                if (gameActive) {
+                    isAiThinking = false;
+                    // 檢查 AI 下完後遊戲是否結束
+                    if (!checkGameResult()) {
+                        // 遊戲未結束，更新狀態
+                        currentPlayer = humanPlayer;
+                        renderBoard(); // 重繪棋盤以啟用點擊
+                        updateStatusMessage();
+                    }
+                }
+            }
+        }
+
+        // --- 呼叫 Gemini API 取得 AI 步驟 ---
+        async function getGeminiMove() {
+            // 🔥 新增：在函式內動態建立 API URL
+            const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+            // 系統提示：定義 AI 的角色和規則
+            const systemPrompt = `你是個專業的圈圈叉叉（Tic-Tac-Toe）玩家。你扮演 '${aiPlayer}'，玩家扮演 '${humanPlayer}'。你必須只回傳你下一步棋的索引（0到8之間）。不要包含任何其他文字、解釋或問候。你的目標是贏，如果不行就平局。只能選擇空格。`; /* 🔥 更改 "AI" 為 "玩家" */
+            
+            // 使用者提示：提供當前狀態
+            const userQuery = `目前棋盤 (索引 0-8): [${board.map(c => `'${c}'`).join(', ')}]\n輪到你了 (${aiPlayer})。你的下一步是什麼？`;
+
+            const payload = {
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+                contents: [
+                    { parts: [{ text: userQuery }] }
+                ]
+            };
+
+            const response = await fetch(geminiApiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`API error: ${response.status} ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            const moveText = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+            if (!moveText) {
+                throw new Error("API 回傳了無效的內容");
+            }
+
+            const moveIndex = parseInt(moveText, 10);
+            if (!isNaN(moveIndex) && moveIndex >= 0 && moveIndex <= 8 && board[moveIndex] === '') {
+                return moveIndex;
+            } else {
+                console.warn("Gemini 回傳了無效的步驟:", moveText);
+                throw new Error("Gemini returned an invalid move");
+            }
+        }
+
+        // --- 備用的 AI 策略 (隨機選擇) ---
+        function executeFallbackMove() {
+            console.log("啟用備用 龍龍 (隨機)"); /* 🔥 更改 */
+            const emptyCells = board
+                .map((cell, index) => (cell === '' ? index : null))
+                .filter(index => index !== null);
+            
+            if (emptyCells.length > 0) {
+                const randomIndex = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+                executeMove(randomIndex);
+            }
+        }
+
+        // --- 執行 AI 的步驟 ---
+        function executeMove(index) {
+            if (index === undefined || index === null || board[index] !== '') {
+                // 如果 AI 沒給有效步驟，或備用 AI 也找不到地方下
+                if(gameActive) executeFallbackMove();
+                return;
+            }
+            board[index] = aiPlayer;
+            // (不要在這裡切換 currentPlayer 或 renderBoard，
+            //  handleAITurn 的 finally 區塊會統一處理)
+        }
+
+        // --- 檢查遊戲結果 ---
+        function checkGameResult() {
+            let roundWon = false;
+            for (const combo of winningCombos) {
+                const [a, b, c] = combo;
+                if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+                    gameActive = false;
+                    const winner = board[a];
+                    statusMessageEl.textContent = winner === humanPlayer ? '你贏了！🎉' : '龍龍 贏了！'; /* 🔥 更改 */
+                    roundWon = true;
+                    aiLoadingEl.classList.remove('show'); // 遊戲結束，隱藏讀取
+                    renderBoard(); // 重繪棋盤以移除點擊事件
+                    break;
+                }
+            }
+
+            if (!roundWon && !board.includes('')) {
+                gameActive = false;
+                statusMessageEl.textContent = '平手！';
+                aiLoadingEl.classList.remove('show');
+                return true;
+            }
+
+            return roundWon;
+        }
+
+        // --- 切換玩家角色 (功能 4) ---
+        function handlePlayerChange() {
+            if (humanPlayer === 'X') {
+                humanPlayer = 'O';
+                aiPlayer = 'X';
+                playerToggleBtn.textContent = '你 (O) 後手';
+            } else {
+                humanPlayer = 'X';
+                aiPlayer = 'O';
+                playerToggleBtn.textContent = '你 (X) 先手';
+            }
+            
+            // 只有在遊戲結束或剛開始時切換才立即重設
+            // 如果遊戲玩到一半，就等下次按重設
+            if (!gameActive || board.every(c => c === '')) {
+                initializeGame();
+            }
+        }
+
+        /* * ----------------------------------------------------
+         * 畫面互動邏輯 (拖動, 縮放, 調整大小)
+         * ----------------------------------------------------
+         */
+
+        // --- 1. 背景平移 (Pan) ---
+        function startPan(e) {
+            // 確保點擊的是背景本身，而不是遊戲區或按鈕
+            if (e.target === bgImage) {
+                isPanning = true;
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+                bgImage.style.cursor = 'grabbing';
+            }
+        }
+
+        function doPan(e) {
+            if (!isPanning) return;
+            
+            const deltaX = e.clientX - panStartX;
+            const deltaY = e.clientY - panStartY;
+            
+            // 更新起始點
+            panStartX = e.clientX;
+            panStartY = e.clientY;
+            
+            const containerWidth = window.innerWidth;
+            const containerHeight = window.innerHeight;
+            
+            // 速度調整 (除以 scale 讓縮小時拖更快，放大時拖更慢，符合直覺)
+            bgPosX += (deltaX / containerWidth) * 100 / bgScale;
+            bgPosY += (deltaY / containerHeight) * 100 / bgScale;
+
+            updateBackgroundTransform();
+        }
+
+        function endPan(e) {
+            isPanning = false;
+            bgImage.style.cursor = 'grab';
+        }
+
+        // --- 2. 背景縮放 (Zoom - 滾輪) ---
+        function handleZoom(e) {
+            // 確保滾動事件發生在背景上，而不是遊戲區
+            if (!gameContainer.contains(e.target)) {
+                e.preventDefault(); // 防止頁面滾動
+
+                const scaleAmount = -e.deltaY * 0.001; // 滾動靈敏度
+                const oldScale = bgScale;
+
+                bgScale += scaleAmount * bgScale; // 越放大，縮放越快
+                bgScale = Math.max(minScale, Math.min(maxScale, bgScale)); // 限制縮放範圍
+
+                // --- 以滑鼠為中心縮放 ---
+                const mouseX = (e.clientX / window.innerWidth) * 100;
+                const mouseY = (e.clientY / window.innerHeight) * 100;
+
+                bgPosX -= (mouseX - bgPosX) * (bgScale / oldScale - 1);
+                bgPosY -= (mouseY - bgPosY) * (bgScale / oldScale - 1);
+                
+                updateBackgroundTransform();
+            }
+        }
+
+        // --- 3. 遊戲區拖動 ---
+        function startGameDrag(e) {
+            // 確保點擊的是控制面板，且不是按鈕
+            if (e.target.closest('button')) {
+                return; // 如果點擊的是按鈕，不拖動
+            }
+            
+            isDraggingGame = true;
+            
+            const transform = window.getComputedStyle(gameContainer).transform;
+            if (transform === 'none') {
+                gameOffsetX = 0;
+                gameOffsetY = 0;
+            } else {
+                const matrix = new DOMMatrix(transform);
+                gameOffsetX = matrix.m41; // tx
+                gameOffsetY = matrix.m42; // ty
+            }
+            
+            gameDragStartX = e.clientX - gameOffsetX;
+            gameDragStartY = e.clientY - gameOffsetY;
+            
+            controlPanel.style.cursor = 'move';
+            body.style.userSelect = 'none'; // 防止拖動時選取文字
+        }
+
+        function doGameDrag(e) {
+            if (!isDraggingGame) return;
+
+            const newX = e.clientX - gameDragStartX;
+            const newY = e.clientY - gameDragStartY;
+            
+            gameContainer.style.transform = `translate(${newX}px, ${newY}px)`;
+        }
+
+        function endGameDrag(e) {
+            isDraggingGame = false;
+            controlPanel.style.cursor = 'move';
+            body.style.userSelect = '';
+        }
+
+        /* 🔥 移除：移除 startResize, doResize, endResize 整個區塊 */
+
+        // --- 輔助函式：更新背景 Transform ---
+        function updateBackgroundTransform() {
+            bgImage.style.backgroundPosition = `${bgPosX}% ${bgPosY}%`;
+            bgImage.style.transform = `scale(${bgScale})`;
+        }
+
+        /* 🔥 移除：移除 updateBoardFontSize 整個函式 */
+
+        
+        /* 🔥 移除：移除 resizeGame 整個函式 */
+
+
+        /* * ----------------------------------------------------
+         * 綁定事件監聽器
+         * ----------------------------------------------------
+         */
+
+        // 遊戲按鈕
+        resetButton.onclick = initializeGame;
+        playerToggleBtn.onclick = handlePlayerChange;
+
+        // 背景平移
+        bgImage.addEventListener('mousedown', startPan);
+        body.addEventListener('mousemove', doPan);
+        body.addEventListener('mouseup', endPan);
+        body.addEventListener('mouseleave', endPan); // 移出視窗也停止
+
+        // 背景縮放 (滾輪)
+        body.addEventListener('wheel', handleZoom, { passive: false }); // {passive: false} 才能 preventDefault
+
+        // 遊戲區拖動
+        controlPanel.addEventListener('mousedown', startGameDrag);
+        body.addEventListener('mousemove', doGameDrag);
+        body.addEventListener('mouseup', endGameDrag);
+        body.addEventListener('mouseleave', endGameDrag);
+
+        /* 🔥 移除：遊戲區調整大小 (拖曳點) 的事件監聽 */
+        
+        // --- 新增：按鈕縮放/調整大小 ---
+        // 背景縮放按鈕
+        bgZoomInBtn.onclick = () => zoomInBackground(1.2);  // 放大 20%
+        bgZoomOutBtn.onclick = () => zoomInBackground(0.8); // 縮小 20%
+
+        /* 🔥 移除：遊戲區調整大小按鈕的事件監聽 */
+
+        // 🔥 新增：API Key 輸入框事件監聽
+        apiKeyInput.value = apiKey; // 載入時自動填入
+        apiKeyInput.addEventListener('input', (e) => {
+            apiKey = e.target.value; // 當使用者輸入時，即時更新 apiKey 變數
+        });
+
+
+        // --- 啟動遊戲 ---
+        initializeGame();
+        /* 🔥 移除：不再需要用 JS 設定寬度或更新字體 */
+    </script>
+
+</body>
+</html>
